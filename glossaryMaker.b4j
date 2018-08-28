@@ -1,0 +1,190 @@
+﻿AppType=JavaFX
+Build1=Default,b4j.example
+File1=main.bjl
+FileGroup1=Default Group
+Group=Default Group
+Library1=jcore
+Library2=jfx
+Library3=javaobject
+NumberOfFiles=1
+NumberOfLibraries=3
+NumberOfModules=0
+Version=6.01
+@EndOfDesignText@
+#Region Project Attributes 
+	#MainFormWidth: 600
+	#MainFormHeight: 600 
+
+#End Region
+
+#AdditionalJar: pinyin4j-2.5.0
+	
+Sub Process_Globals
+	Private fx As JFX
+	Private MainForm As Form
+	Private Button1 As Button
+	Private TextArea1 As TextArea
+	Private TextArea2 As TextArea
+	Private glossaryMap As Map
+	Private glossaryMapPinyin As Map
+	
+	Private CheckBox1 As CheckBox
+End Sub
+
+Sub AppStart (Form1 As Form, Args() As String)
+	MainForm = Form1
+	MainForm.RootPane.LoadLayout("main") 'Load the layout file.
+	MainForm.Show
+	glossaryMap.Initialize
+	glossaryMapPinyin.Initialize
+
+End Sub
+
+'Return true to allow the default exceptions handler to handle the uncaught exception.
+Sub Application_Error (Error As Exception, StackTrace As String) As Boolean
+	Return True
+End Sub
+
+Sub Button1_MouseClicked (EventData As MouseEvent)
+	structurize
+	Dim glossaryMapCharRank As Map
+	
+	glossaryMapCharRank=getGlossary(sortList)
+	Log(glossaryMapCharRank)
+	Dim result As String
+	For Each initial As String In glossaryMapCharRank.Keys
+		result=result&initial.ToUpperCase
+		Dim entries As List
+		entries=glossaryMapCharRank.Get(initial)
+        For Each entry As Map In entries
+			result=result&CRLF&entry.GetKeyAt(0)&CRLF&entry.GetValueAt(0)
+        Next
+		result=result&CRLF
+    Next
+	TextArea2.Text=result
+End Sub
+
+Sub structurize
+	glossaryMap.Clear
+	glossaryMapPinyin.Clear
+	Dim linesList As List
+	linesList.Initialize
+	linesList.AddAll(Regex.Split(CRLF,TextArea1.Text))
+	linesList=dropBlankLinesAndCapitalLetter(linesList)
+	Dim isNewEntry As Boolean
+	isNewEntry=False
+	Dim chi,eng,explaination As String
+    For Each line As String In linesList
+		Log(line)
+		line=line.Trim
+        If line.Contains(" ") Then
+			If chi<>"" Then
+				glossaryMap.Put(chi,explaination)
+				chi=""
+				eng=""
+				explaination=""
+			End If
+		    isNewEntry=True
+			chi=line.SubString(line.LastIndexOf(" ")+1)
+			eng=line.Replace(chi,"")
+			If CheckBox1.Checked Then
+				chi=chi&" "&eng
+			End If
+		Else
+			isNewEntry=False
+        End If
+		If isNewEntry=False Then
+			explaination=explaination&line&CRLF
+		End If
+    Next
+	glossaryMap.Put(chi,explaination)
+	Log(glossaryMap)
+End Sub
+
+Sub sortList As List
+	Dim sortedList As List
+	sortedList.Initialize
+	For Each key As String In glossaryMap.Keys
+		Log(key)
+		Dim map1 As Map
+		map1.Initialize
+		map1.Put(key,glossaryMap.Get(key))
+		Dim pinyin As String
+		pinyin=hanziToPinyin(key)
+		sortedList.Add(pinyin)
+		glossaryMapPinyin.Put(pinyin,map1)
+	Next
+	sortedList.Sort(True)
+	Return sortedList
+End Sub
+
+Sub getGlossary(sortedlist As List) As Map
+	Dim glossaryMapCharRank As Map
+	glossaryMapCharRank.Initialize
+	Dim entryList As List
+	entryList.Initialize
+	Dim previousInitial As String
+	previousInitial=""
+	For Each pinyin As String In sortedlist
+
+
+		Dim initial As String
+		initial=pinyin.SubString2(0,1)
+
+		If previousInitial<>initial Then
+			If previousInitial<>"" Then
+				Log("添加字母"&previousInitial)
+				Log(entryList)
+				Dim newlist As List
+				newlist.Initialize
+				newlist.AddAll(entryList)
+				glossaryMapCharRank.Put(previousInitial,newlist)
+				entryList.Clear
+				entryList.add(glossaryMapPinyin.Get(pinyin))
+			Else
+				entryList.add(glossaryMapPinyin.Get(pinyin))
+			End If
+			previousInitial=pinyin.SubString2(0,1)
+		Else
+			Log("添加项目"&pinyin)
+			entryList.add(glossaryMapPinyin.Get(pinyin))
+		End If
+	Next
+	glossaryMapCharRank.Put(previousInitial,entryList)
+	Return glossaryMapCharRank
+End Sub
+
+
+Sub dropBlankLinesAndCapitalLetter(linesList As List) As List
+	Dim newList As List
+	newList.Initialize
+	For Each line As String In linesList
+		If line<>"" And line.Length>1 Then
+			newList.Add(line)
+		End If
+	Next
+	Return newList
+End Sub
+
+Sub hanziToPinyin(text As String) As String
+    If text.Contains(" ") Then
+		text=text.SubString2(0,text.IndexOf(" "))	
+    End If
+	text=text.Trim
+	Log(text)
+	Dim pinyin As String
+	Dim hanziList As List
+	hanziList.Initialize
+	hanziList.AddAll(Regex.Split("",text))
+
+	Dim jo As JavaObject
+	jo.InitializeStatic("net.sourceforge.pinyin4j.PinyinHelper")
+	For Each singlechar As Char In hanziList
+
+		Dim strArray() As String
+		strArray=jo.RunMethod("toHanyuPinyinStringArray",Array As Object(singlechar))
+
+		pinyin=pinyin&strArray(0)
+	Next
+	Return pinyin
+End Sub
